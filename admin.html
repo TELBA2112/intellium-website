@@ -1,0 +1,34 @@
+<!DOCTYPE html>
+<html lang="uz">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Admin Panel - Mijozlar</title>
+    <link rel="stylesheet" href="admin.css">
+</head>
+<body>
+    <div class="container">
+        <h1>Kelib Tushgan So'rovlar</h1>
+        <div class="controls">
+            <button id="refreshBtn" class="refresh-btn">Yangilash</button>
+            <a href="/api/leads/download" class="download-btn">Excel (.xlsx) formatida yuklab olish</a>
+        </div>
+        <table id="leadsTable">
+            <thead>
+                <tr>
+                    <th>Sana</th>
+                    <th>Ism</th>
+                    <th>Brend Nomi</th>
+                    <th>Telefon</th>
+                    <th>Biznes Yo'nalishi</th>
+                    <th>Manba</th>
+                </tr>
+            </thead>
+            <tbody>
+                <!-- Ma'lumotlar JavaScript orqali yuklanadi -->
+            </tbody>
+        </table>
+    </div>
+    <script src="admin.js"></script>
+</body>
+</html>

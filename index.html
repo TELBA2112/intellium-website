@@ -1,0 +1,89 @@
+<!DOCTYPE html>
+<html lang="uz">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Intellium - Yuridik Xizmatlar</title>
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+    <header>
+        <div class="container">
+            <a href="#" class="logo"><img src="https://drive.google.com/uc?export=view&id=1e3nw18pWNM_qFPhn_-CFX8JPwZn-fHdT" alt="Intellium Logo"></a>
+            <nav>
+                <ul>
+                    <li><a href="#about">Biz haqimizda</a></li>
+                    <li><a href="#services">Xizmatlar</a></li>
+                    <li><a href="#team">Jamoa</a></li>
+                    <li><a href="#contact">Aloqa</a></li>
+                </ul>
+            </nav>
+        </div>
+    </header>
+
+    <main>
+        <section id="hero">
+            <div class="container">
+                <h1>Brendingiz va ixtirolaringizni bugunoq patentlang!</h1>
+                <p>Biznesingiz eng qimmatli aktivlarini qonuniy himoya qiling. Bepul konsultatsiya uchun ma'lumotlaringizni qoldiring.</p>
+                <div class="lead-form">
+                    <h3>Bepul konsultatsiya oling</h3>
+                    <form id="leadForm">
+                        <div class="form-row">
+                            <input type="text" id="name" name="name" placeholder="Ismingiz" required>
+                            <input type="text" id="brand_name" name="brand_name" placeholder="Brend nomingiz" required>
+                        </div>
+                        <input type="tel" id="phone" name="phone" placeholder="+998 (XX) XXX-XX-XX" required>
+                        <input type="text" id="business_industry" name="business_industry" placeholder="Biznes yo'nalishingiz (ixtiyoriy)">
+                        <input type="hidden" id="source" name="source">
+                        <button type="submit">So'rov Yuborish</button>
+                    </form>
+                </div>
+            </div>
+        </section>
+
+        <section id="about" class="container">
+            <h2>Biz haqimizda</h2>
+            <p>Bizning kompaniyamiz intellektual mulk sohasida yuqori malakali yuridik yordam ko'rsatadi. Maqsadimiz - har bir mijozning innovatsion g'oyalari va brendlarini ishonchli himoya qilish.</p>
+        </section>
+
+        <section id="services" class="container">
+            <h2>Xizmatlarimiz</h2>
+            <div class="services-grid">
+                <div class="service-item">Tovar belgisini ro'yxatdan o'tkazish</div>
+                <div class="service-item">Ixtirolarni patentlash</div>
+                <div class="service-item">Mualliflik huquqini himoya qilish</div>
+                <div class="service-item">Litsenziya shartnomalari</div>
+            </div>
+        </section>
+
+        <section id="team" class="container">
+            <h2>Bizning mutaxassisimiz</h2>
+            <p>Bu yerda kompaniya rahbari yoki yetakchi yuristi haqida ma'lumot, rasm va tajribasi joylashtiriladi.</p>
+        </section>
+
+    </main>
+
+    <footer id="contact">
+        <div class="container">
+            <p>&copy; 2023 Intellium. Barcha huquqlar himoyalangan.</p>
+            <p>Manzil: Toshkent sh., ... ko'chasi | Telefon: +998 77 792 78 28</p>
+        </div>
+    </footer>
+
+    <!-- YANGI: Muvaffaqiyatli xabar oynasi -->
+    <div id="success-message" class="success-popup hidden">
+        <div class="popup-content">
+            <svg class="checkmark" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 52 52">
+                <circle class="checkmark__circle" cx="26" cy="26" r="25" fill="none"/>
+                <path class="checkmark__check" fill="none" d="M14.1 27.2l7.1 7.2 16.7-16.8"/>
+            </svg>
+            <h2>Rahmat!</h2>
+            <p>So'rovingiz qabul qilindi. Tez orada siz bilan bog'lanamiz!</p>
+        </div>
+    </div>
+
+    <script src="https://unpkg.com/imask"></script>
+    <script src="script.js"></script>
+</body>
+</html>

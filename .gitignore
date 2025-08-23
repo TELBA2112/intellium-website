@@ -1,0 +1,9 @@
+# Bog'liqliklar (Dependencies)
+node_modules/
+
+# Ma'lumotlar fayli
+data/
+leads.json
+
+# Muhit o'zgaruvchilari
+.env
