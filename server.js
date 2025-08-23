@@ -6,16 +6,33 @@ const path = require('path');
 const ExcelJS = require('exceljs');
 
 const app = express();
-const PORT = process.env.PORT || 3000; // Hosting uchun PORT ni sozlash
-const DATA_DIR = path.join(__dirname, 'data'); // Ma'lumotlar uchun papka
-const LEADS_FILE = path.join(DATA_DIR, 'leads.json'); // leads.json faylining yangi yo'li
+const PORT = process.env.PORT || 3000;
+const DATA_DIR = path.join(__dirname, 'data');
+const LEADS_FILE = path.join(DATA_DIR, 'leads.json');
 
-// --- YANGI: Ma'lumotlar papkasini va faylini yaratish ---
-if (!fs.existsSync(DATA_DIR)) {
-    fs.mkdirSync(DATA_DIR, { recursive: true });
-}
-if (!fs.existsSync(LEADS_FILE)) {
-    fs.writeFileSync(LEADS_FILE, '[]', 'utf8');
+// --- O'ZGARTIRISH: Ma'lumotlar papkasini va faylini ishonchli yaratish ---
+try {
+    // Agar 'data' yo'li mavjud bo'lsa-yu, u papka bo'lmasa...
+    if (fs.existsSync(DATA_DIR) && !fs.lstatSync(DATA_DIR).isDirectory()) {
+        console.log(`'${DATA_DIR}' papka emas, fayl. Uni o'chirib, papka yaratilmoqda.`);
+        fs.unlinkSync(DATA_DIR); // Faylni o'chirish
+    }
+
+    // Agar 'data' papkasi mavjud bo'lmasa, uni yaratish
+    if (!fs.existsSync(DATA_DIR)) {
+        console.log(`'${DATA_DIR}' papkasi yaratilmoqda.`);
+        fs.mkdirSync(DATA_DIR, { recursive: true });
+    }
+
+    // Agar 'leads.json' fayli mavjud bo'lmasa, uni yaratish
+    if (!fs.existsSync(LEADS_FILE)) {
+        console.log(`'${LEADS_FILE}' fayli yaratilmoqda.`);
+        fs.writeFileSync(LEADS_FILE, '[]', 'utf8');
+    }
+} catch (error) {
+    console.error("Ishga tushirishda papka/fayl yaratishda xatolik:", error);
+    // Xatolik bo'lsa, serverni ishga tushirmaslik uchun jarayonni to'xtatish
+    process.exit(1);
 }
 
 // --- YANGI: Autentifikatsiya sozlamalari ---
