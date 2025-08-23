@@ -10,9 +10,12 @@ const PORT = process.env.PORT || 3000; // Hosting uchun PORT ni sozlash
 const DATA_DIR = path.join(__dirname, 'data'); // Ma'lumotlar uchun papka
 const LEADS_FILE = path.join(DATA_DIR, 'leads.json'); // leads.json faylining yangi yo'li
 
-// --- YANGI: Ma'lumotlar papkasini yaratish ---
+// --- YANGI: Ma'lumotlar papkasini va faylini yaratish ---
 if (!fs.existsSync(DATA_DIR)) {
-    fs.mkdirSync(DATA_DIR);
+    fs.mkdirSync(DATA_DIR, { recursive: true });
+}
+if (!fs.existsSync(LEADS_FILE)) {
+    fs.writeFileSync(LEADS_FILE, '[]', 'utf8');
 }
 
 // --- YANGI: Autentifikatsiya sozlamalari ---
@@ -52,13 +55,14 @@ if (!fs.existsSync(LEADS_FILE)) {
 }
 
 // API to get all leads (endi himoyalangan)
-app.get('/api/leads', (req, res) => {
-    fs.readFile(LEADS_FILE, 'utf8', (err, data) => {
-        if (err) {
-            return res.status(500).send('Error reading leads file.');
-        }
+app.get('/api/leads', auth, (req, res) => {
+    try {
+        const data = fs.readFileSync(LEADS_FILE, 'utf8');
         res.json(JSON.parse(data));
-    });
+    } catch (err) {
+        console.error("Leads faylini o'qishda xatolik:", err);
+        res.status(500).send('Ma\'lumotlarni o\'qishda xatolik.');
+    }
 });
 
 // API to submit a new lead (bu ochiq qoladi, parol so'ramaydi)
@@ -81,12 +85,38 @@ app.post('/api/leads', (req, res) => {
         leads.unshift(newLead); // Add new lead to the beginning
         fs.writeFile(LEADS_FILE, JSON.stringify(leads, null, 2), (err) => {
             if (err) {
+                console.error("Lead yozishda xatolik:", err);
                 return res.status(500).send('Error saving lead.');
             }
             res.status(201).json(newLead);
         });
     });
 });
+
+// --- YANGI: So'rovni o'chirish uchun API ---
+app.delete('/api/leads/:id', auth, (req, res) => {
+    const leadId = parseInt(req.params.id, 10);
+    fs.readFile(LEADS_FILE, 'utf8', (err, data) => {
+        if (err) {
+            return res.status(500).send('Error reading leads file.');
+        }
+        let leads = JSON.parse(data);
+        const initialLength = leads.length;
+        leads = leads.filter(lead => lead.id !== leadId);
+
+        if (leads.length === initialLength) {
+            return res.status(404).send('Bunday ID topilmadi.');
+        }
+
+        fs.writeFile(LEADS_FILE, JSON.stringify(leads, null, 2), (err) => {
+            if (err) {
+                return res.status(500).send('Error saving leads file.');
+            }
+            res.status(200).send({ message: 'Muvaffaqiyatli o\'chirildi' });
+        });
+    });
+});
+
 
 // API to download leads as XLSX
 app.get('/api/leads/download', auth, async (req, res) => {
@@ -130,6 +160,7 @@ app.get('/api/leads/download', auth, async (req, res) => {
     }
 });
 
-app.listen(PORT, () => {
-    console.log(`Server http://localhost:${PORT} portida ishga tushdi`);
+// --- O'ZGARTIRISH: Serverni to'g'ri hostda ishga tushirish ---
+app.listen(PORT, '0.0.0.0', () => {
+    console.log(`Server ${PORT} portida ishga tushdi`);
 });
