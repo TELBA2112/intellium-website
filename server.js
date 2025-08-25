@@ -8,54 +8,13 @@ const ExcelJS = require('exceljs');
 const app = express();
 const PORT = process.env.PORT || 3000;
 
-// MUHIM: Ma'lumotlarni saqlash papkasi va fayl yo'li
-const isRenderEnvironment = process.env.RENDER === 'true';
-console.log('Is Render Environment:', isRenderEnvironment);
+// CORS va body-parser sozlamalari
+app.use(cors());
+app.use(bodyParser.json());
 
-// Render muhiti uchun boshqa papka, oddiy ishga tushirish uchun boshqa papka
-let DATA_DIR;
-if (isRenderEnvironment) {
-    DATA_DIR = '/opt/render/project/data';
-} else {
-    DATA_DIR = path.join(__dirname, 'data');
-}
-
-const LEADS_FILE = path.join(DATA_DIR, 'leads.json');
-
-console.log(`Ma'lumotlar papkasi: ${DATA_DIR}`);
-console.log(`Leads fayli: ${LEADS_FILE}`);
-
-// --- Ma'lumotlarni saqlash papkasini yaratish ---
-try {
-    if (!fs.existsSync(DATA_DIR)) {
-        console.log(`Ma'lumotlar papkasi yaratilmoqda: ${DATA_DIR}`);
-        fs.mkdirSync(DATA_DIR, { recursive: true });
-    }
-    
-    // Agar fayl mavjud bo'lmasa, bo'sh ro'yxat bilan yaratamiz
-    if (!fs.existsSync(LEADS_FILE)) {
-        console.log(`Leads fayli yaratilmoqda: ${LEADS_FILE}`);
-        fs.writeFileSync(LEADS_FILE, '[]', 'utf8');
-    } else {
-        // Faylni o'qib, to'g'ri JSON ekanligini tekshiramiz
-        try {
-            const data = fs.readFileSync(LEADS_FILE, 'utf8');
-            const leads = JSON.parse(data);
-            console.log(`Leads fayli muvaffaqiyatli o'qildi. Jami ${leads.length} ta yozuv bor.`);
-        } catch (e) {
-            console.error("Faylni o'qishda xato:", e);
-            // Xato bo'lsa, yangi fayl yaratamiz
-            console.log("Buzilgan fayl yangilanmoqda...");
-            fs.writeFileSync(LEADS_FILE, '[]', 'utf8');
-        }
-    }
-} catch (error) {
-    console.error("Ma'lumotlar papkasini yaratishda xatolik:", error);
-}
-
-// --- YANGI: Autentifikatsiya sozlamalari ---
+// Autentifikatsiya sozlamalari
 const ADMIN_USER = 'admin';
-const ADMIN_PASS = 'intellium2023'; // Parolni o'zgartirishingiz mumkin
+const ADMIN_PASS = 'intellium2023'; 
 
 // Autentifikatsiya funksiyasi
 const auth = (req, res, next) => {
@@ -63,50 +22,75 @@ const auth = (req, res, next) => {
     const [login, password] = Buffer.from(b64auth, 'base64').toString().split(':');
 
     if (login && password && login === ADMIN_USER && password === ADMIN_PASS) {
-        return next(); // Agar login va parol to'g'ri bo'lsa, keyingi qadamga o'tish
+        return next(); 
     }
 
-    res.set('WWW-Authenticate', 'Basic realm="401"'); // Brauzerga parol so'rash oynasini chiqarishni aytish
-    res.status(401).send('Autentifikatsiya talab qilinadi.'); // Xatolik xabari
+    res.set('WWW-Authenticate', 'Basic realm="401"');
+    res.status(401).send('Autentifikatsiya talab qilinadi.');
 };
 
-// Middlewares
-app.use(cors());
-app.use(bodyParser.json());
+// Ma'lumotlar papkasi va fayl yo'lini aniqlash
+const isRenderEnvironment = process.env.RENDER === 'true';
+console.log('Muhit:', isRenderEnvironment ? 'Render' : 'Mahalliy');
 
-// --- O'ZGARTIRISH: Himoyalangan yo'llar (routes) ---
-// /admin bilan boshlanadigan va /api/leads bilan bog'liq barcha so'rovlar uchun `auth` funksiyasini ishlatish
+// Ma'lumotlar saqlanadigan joy (disk yo'li)
+let DATA_DIR;
+if (isRenderEnvironment) {
+    DATA_DIR = '/opt/render/project/data';
+} else {
+    DATA_DIR = path.join(__dirname, 'data');
+}
+const LEADS_FILE = path.join(DATA_DIR, 'leads.json');
+
+console.log(`Ma'lumotlar papkasi: ${DATA_DIR}`);
+console.log(`Leads fayli: ${LEADS_FILE}`);
+
+// Statik fayllarni berish (HTML, CSS, JS)
+app.use(express.static(__dirname));
+
+// Ma'lumotlar papkasini yaratish
+try {
+    if (!fs.existsSync(DATA_DIR)) {
+        console.log(`Ma'lumotlar papkasini yaratish: ${DATA_DIR}`);
+        fs.mkdirSync(DATA_DIR, { recursive: true });
+    }
+    
+    // Ma'lumotlar fayli mavjud bo'lmasa, yaratish
+    if (!fs.existsSync(LEADS_FILE)) {
+        console.log(`Ma'lumotlar faylini yaratish: ${LEADS_FILE}`);
+        fs.writeFileSync(LEADS_FILE, '[]', 'utf8');
+    }
+} catch (error) {
+    console.error("Ma'lumotlar papkasini/faylini yaratishda xatolik:", error);
+}
+
+// Admin sahifasini himoyalash
 app.use('/admin.html', auth);
 app.use('/admin.css', auth);
 app.use('/admin.js', auth);
-app.get('/api/leads', auth);
-app.get('/api/leads/download', auth);
 
-app.use(express.static(__dirname)); // Serve static files like index.html
-
-// Ensure leads.json exists
-if (!fs.existsSync(LEADS_FILE)) {
-    fs.writeFileSync(LEADS_FILE, '[]', 'utf8');
-}
-
-// API to get all leads
+// API yo'llari: So'rovlarni olish
 app.get('/api/leads', auth, (req, res) => {
     try {
+        if (!fs.existsSync(LEADS_FILE)) {
+            console.log("Ma'lumotlar fayli topilmadi. Bo'sh ro'yxat qaytariladi.");
+            return res.json([]);
+        }
+        
         const data = fs.readFileSync(LEADS_FILE, 'utf8');
-        res.json(JSON.parse(data));
+        const leads = JSON.parse(data);
+        res.json(leads);
     } catch (err) {
-        console.error("Leads faylini o'qishda xatolik:", err);
+        console.error("Ma'lumotlarni o'qishda xatolik:", err);
         res.status(500).send('Ma\'lumotlarni o\'qishda xatolik.');
     }
 });
 
-// API to submit a new lead
+// API yo'llari: Yangi so'rov qo'shish
 app.post('/api/leads', (req, res) => {
     try {
-        // Kelgan ma'lumotlarni konsolga chiqaramiz va tekshiramiz
-        console.log("Kelgan ma'lumotlar:", JSON.stringify(req.body));
+        console.log("Yangi so'rov ma'lumotlari:", req.body);
         
-        // Ma'lumotlarni to'g'ri nomlar bilan qabul qilish
         const newLead = {
             id: Date.now(),
             clientName: req.body.name || "",
@@ -119,114 +103,112 @@ app.post('/api/leads', (req, res) => {
             source: req.body.source || "Noma'lum",
             date: new Date().toLocaleString('uz-UZ')
         };
-
-        console.log("Yangi so'rov yaratildi:", JSON.stringify(newLead));
-
-        // Ma'lumotlarni o'qish va yangi ma'lumotni qo'shish
+        
         let leads = [];
-        try {
-            if (fs.existsSync(LEADS_FILE)) {
-                const data = fs.readFileSync(LEADS_FILE, 'utf8');
+        
+        // Ma'lumotlarni o'qish
+        if (fs.existsSync(LEADS_FILE)) {
+            const data = fs.readFileSync(LEADS_FILE, 'utf8');
+            try {
                 leads = JSON.parse(data);
                 if (!Array.isArray(leads)) {
-                    console.warn("Fayldagi ma'lumot massiv emas, yangi massiv yaratildi");
+                    console.warn("Fayl formatida xato. Yangi ro'yxat yaratildi.");
                     leads = [];
                 }
+            } catch (e) {
+                console.error("JSON formatida xatolik:", e);
+                leads = [];
             }
-        } catch (e) {
-            console.error("Ma'lumotlarni o'qishda xato:", e);
-            leads = [];
         }
-
-        // Yangi ma'lumotni boshiga qo'shish
+        
+        // Yangi ma'lumotni qo'shish
         leads.unshift(newLead);
         
         // Ma'lumotlarni saqlash
         fs.writeFileSync(LEADS_FILE, JSON.stringify(leads, null, 2), 'utf8');
-        console.log(`Ma'lumotlar saqlandi. Jami: ${leads.length}`);
+        console.log(`Ma'lumotlar saqlandi. Bazada ${leads.length} ta so'rov bor.`);
         
         res.status(201).json(newLead);
     } catch (err) {
-        console.error("Lead yozishda xatolik:", err);
-        return res.status(500).send('Error saving lead.');
+        console.error("Ma'lumotlarni saqlashda xatolik:", err);
+        res.status(500).send('Ma\'lumotlarni saqlashda xatolik.');
     }
 });
 
-// Yangi: Mijoz ma'lumotlarini yangilash uchun API
+// API yo'llari: Ma'lumot yangilash
 app.put('/api/leads/:id/update', auth, (req, res) => {
     const leadId = parseInt(req.params.id, 10);
-    const updates = req.body;
     
     try {
+        if (!fs.existsSync(LEADS_FILE)) {
+            return res.status(404).send('Ma\'lumotlar fayli topilmadi.');
+        }
+        
         const data = fs.readFileSync(LEADS_FILE, 'utf8');
         const leads = JSON.parse(data);
         
         const leadIndex = leads.findIndex(lead => lead.id === leadId);
         
         if (leadIndex === -1) {
-            return res.status(404).send('Bunday ID topilmadi.');
+            return res.status(404).send('So\'rov topilmadi.');
         }
         
-        // Faqat ruxsat etilgan maydonlarni yangilash
+        // Ruxsat berilgan maydonlarni yangilash
         const allowedFields = ['assignedTo', 'status', 'clientSurname'];
-        
-        Object.keys(updates).forEach(key => {
+        Object.keys(req.body).forEach(key => {
             if (allowedFields.includes(key)) {
-                leads[leadIndex][key] = updates[key];
+                leads[leadIndex][key] = req.body[key];
             }
         });
         
-        fs.writeFileSync(LEADS_FILE, JSON.stringify(leads, null, 2));
+        fs.writeFileSync(LEADS_FILE, JSON.stringify(leads, null, 2), 'utf8');
         res.status(200).json(leads[leadIndex]);
     } catch (err) {
         console.error("Ma'lumotni yangilashda xatolik:", err);
-        res.status(500).send('Yangilashda xatolik.');
+        res.status(500).send('Ma\'lumotni yangilashda xatolik.');
     }
 });
 
-// API to delete a lead
+// API yo'llari: So'rovni o'chirish
 app.delete('/api/leads/:id', auth, (req, res) => {
     const leadId = parseInt(req.params.id, 10);
     
     try {
+        if (!fs.existsSync(LEADS_FILE)) {
+            return res.status(404).send('Ma\'lumotlar fayli topilmadi.');
+        }
+        
         const data = fs.readFileSync(LEADS_FILE, 'utf8');
         let leads = JSON.parse(data);
+        
         const initialLength = leads.length;
         leads = leads.filter(lead => lead.id !== leadId);
-
+        
         if (leads.length === initialLength) {
-            return res.status(404).send('Bunday ID topilmadi.');
+            return res.status(404).send('So\'rov topilmadi.');
         }
-
-        fs.writeFileSync(LEADS_FILE, JSON.stringify(leads, null, 2));
-        res.status(200).send({ message: 'Muvaffaqiyatli o\'chirildi' });
+        
+        fs.writeFileSync(LEADS_FILE, JSON.stringify(leads, null, 2), 'utf8');
+        res.status(200).send({ message: 'So\'rov muvaffaqiyatli o\'chirildi.' });
     } catch (err) {
-        console.error("O'chirishda xatolik:", err);
-        res.status(500).send('O\'chirishda xatolik.');
+        console.error("So'rovni o'chirishda xatolik:", err);
+        res.status(500).send('So\'rovni o\'chirishda xatolik.');
     }
 });
 
-// API to download leads as XLSX
+// API yo'llari: Excel formatida yuklab olish
 app.get('/api/leads/download', auth, async (req, res) => {
     try {
-        console.log("Excel yuklab olish so'rovi qabul qilindi");
         let leads = [];
         
-        try {
-            if (fs.existsSync(LEADS_FILE)) {
-                const data = fs.readFileSync(LEADS_FILE, 'utf8');
-                leads = JSON.parse(data);
-                console.log(`Excel uchun ${leads.length} ta yozuv o'qildi`);
-            }
-        } catch (e) {
-            console.error("Ma'lumotlarni o'qishda xato:", e);
-            leads = [];
+        if (fs.existsSync(LEADS_FILE)) {
+            const data = fs.readFileSync(LEADS_FILE, 'utf8');
+            leads = JSON.parse(data);
         }
-
+        
         const workbook = new ExcelJS.Workbook();
         const worksheet = workbook.addWorksheet('Mijozlar');
-
-        // Ustunlarni sozlash
+        
         worksheet.columns = [
             { header: 'Sana', key: 'date', width: 20 },
             { header: 'Ism', key: 'clientName', width: 20 },
@@ -238,11 +220,10 @@ app.get('/api/leads/download', auth, async (req, res) => {
             { header: 'Status', key: 'status', width: 15 },
             { header: 'Manba', key: 'source', width: 20 }
         ];
-
-        // Sarlavhalarni qalin qilish
+        
         worksheet.getRow(1).font = { bold: true };
         
-        // Qatorlarni qo'shish
+        // Ma'lumotlarni qo'shish
         leads.forEach(lead => {
             worksheet.addRow({
                 date: lead.date || '',
@@ -257,19 +238,9 @@ app.get('/api/leads/download', auth, async (req, res) => {
             });
         });
         
-        // Har bir katak uchun stillar
-        worksheet.eachRow({ includeEmpty: true }, function(row, rowNumber) {
-            if (rowNumber === 1) {
-                row.eachCell({ includeEmpty: true }, function(cell) {
-                    cell.fill = {
-                        type: 'pattern',
-                        pattern: 'solid',
-                        fgColor: { argb: 'FFD3D3D3' }
-                    };
-                });
-            }
-            
-            row.eachCell({ includeEmpty: true }, function(cell) {
+        // Jadvalni chiroyliroq qilish
+        worksheet.eachRow({ includeEmpty: true }, (row, rowNumber) => {
+            row.eachCell({ includeEmpty: true }, (cell) => {
                 cell.border = {
                     top: { style: 'thin' },
                     left: { style: 'thin' },
@@ -278,32 +249,36 @@ app.get('/api/leads/download', auth, async (req, res) => {
                 };
                 cell.alignment = { vertical: 'middle', horizontal: 'center' };
             });
+            
+            if (rowNumber === 1) {
+                row.eachCell({ includeEmpty: true }, (cell) => {
+                    cell.fill = {
+                        type: 'pattern',
+                        pattern: 'solid',
+                        fgColor: { argb: 'FFD3D3D3' }
+                    };
+                });
+            }
         });
-
+        
         res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
         res.setHeader('Content-Disposition', 'attachment; filename=mijozlar.xlsx');
-
+        
         await workbook.xlsx.write(res);
         res.end();
-        console.log("Excel fayli muvaffaqiyatli yaratildi");
     } catch (error) {
-        console.error('XLSX faylini yaratishda xatolik:', error);
-        res.status(500).send('Excel faylini yaratishda xatolik yuz berdi.');
+        console.error('Excel yaratishda xatolik:', error);
+        res.status(500).send('Excel yaratishda xatolik.');
     }
 });
 
-// Render.com Disk bilan bog'liq muammoni hal qilish uchun shutdown hook
-process.on('SIGINT', () => {
-    console.log('Server to\'xtatilmoqda...');
-    process.exit(0);
-});
-
+// Render.com uchun SIGTERM boshqaruvi
 process.on('SIGTERM', () => {
-    console.log('Server to\'xtatilmoqda...');
+    console.log('SIGTERM signali qabul qilindi. Server to\'xtatilmoqda...');
     process.exit(0);
 });
 
-// --- O'ZGARTIRISH: Serverni to'g'ri hostda ishga tushirish ---
+// Serverni ishga tushirish
 app.listen(PORT, '0.0.0.0', () => {
-    console.log(`Server ${PORT} portida ishga tushdi`);
+    console.log(`Server ${PORT} portida ishga tushirildi.`);
 });
