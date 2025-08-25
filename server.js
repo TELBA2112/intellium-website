@@ -8,18 +8,12 @@ const ExcelJS = require('exceljs');
 const app = express();
 const PORT = process.env.PORT || 3000;
 
-// --- YANGI: Ma'lumotlar saqlanadigan yo'lni aniq belgilash ---
-// Render muhitidagi doimiy diskda saqlash uchun
-const RENDER_ENV = process.env.RENDER === 'true';
-const BASE_DIR = RENDER_ENV ? '/opt/render/project/src' : __dirname;
-const DATA_DIR = path.join(BASE_DIR, 'data');
-const LEADS_FILE = path.join(DATA_DIR, 'leads.json');
+// Oddiy yo'l - leads.json fayli asosiy papkada joylashgan
+const LEADS_FILE = path.join(__dirname, 'leads.json');
 
-console.log('Muhit:', RENDER_ENV ? 'Render' : 'Mahalliy');
-console.log('Ma\'lumotlar papkasi:', DATA_DIR);
-console.log('Leads fayli:', LEADS_FILE);
+console.log('Leads fayli joylashuvi:', LEADS_FILE);
 
-// --- YANGI: Autentifikatsiya sozlamalari ---
+// --- Autentifikatsiya sozlamalari ---
 const ADMIN_USER = 'admin';
 const ADMIN_PASS = 'intellium2023';
 
@@ -48,107 +42,95 @@ app.get('/api/leads', auth);
 app.get('/api/leads/download', auth);
 
 // Statik fayllarni berish
-app.use(express.static(__dirname));
+app.use(express.static(__dirname)); 
 
-// --- YANGI: Ma'lumotlar papkasi va faylini yaratish ---
+// Leads.json faylini tekshirish
 try {
-    // Papka mavjud bo'lmasa yaratish
-    if (!fs.existsSync(DATA_DIR)) {
-        console.log(`Ma'lumotlar papkasi yaratilmoqda: ${DATA_DIR}`);
-        fs.mkdirSync(DATA_DIR, { recursive: true });
-    }
-
-    // Fayl mavjud bo'lmasa, bo'sh array bilan yaratish
     if (!fs.existsSync(LEADS_FILE)) {
-        console.log(`Leads fayli yaratilmoqda: ${LEADS_FILE}`);
+        console.log("Leads.json fayli mavjud emas, yangi fayl yaratilmoqda...");
         fs.writeFileSync(LEADS_FILE, '[]', 'utf8');
+        console.log("Leads.json fayli yaratildi.");
     } else {
+        console.log("Leads.json fayli mavjud, uning to'g'riligini tekshirish...");
         try {
-            // Faylni o'qib, to'g'ri JSON formatida ekanligini tekshirish
             const data = fs.readFileSync(LEADS_FILE, 'utf8');
             const leads = JSON.parse(data);
-            console.log(`Leads fayli tekshirildi. Jami: ${leads.length} ta ma'lumot.`);
-        } catch (error) {
-            console.error('Leads fayli buzilgan, yangi fayl yaratilmoqda:', error);
-            // Fayl buzilgan bo'lsa, yangi bo'sh fayl yaratish
+            console.log(`Leads.json fayli to'g'ri. ${leads.length} ta so'rov mavjud.`);
+        } catch (e) {
+            console.error("Leads.json fayli buzilgan:", e.message);
+            // Faylni zaxiralash
+            const backupPath = path.join(__dirname, 'leads_backup.json');
+            fs.copyFileSync(LEADS_FILE, backupPath);
+            console.log("Mavjud fayl zaxiralandi:", backupPath);
+            // Yangi fayl yaratish
             fs.writeFileSync(LEADS_FILE, '[]', 'utf8');
+            console.log("Leads.json fayli qayta yaratildi.");
         }
     }
 } catch (error) {
-    console.error('Ma\'lumotlar papkasi yoki faylini yaratishda xatolik:', error);
+    console.error("Fayl operatsiyalarida xatolik:", error.message);
 }
 
-// --- API endpoints ---
-
 // API to get all leads
-app.get('/api/leads', (req, res) => {
+app.get('/api/leads', auth, (req, res) => {
     try {
-        if (!fs.existsSync(LEADS_FILE)) {
-            console.log('Leads fayli mavjud emas, bo\'sh massiv qaytariladi');
-            return res.json([]);
-        }
-
         const data = fs.readFileSync(LEADS_FILE, 'utf8');
         const leads = JSON.parse(data);
-        console.log(`${leads.length} ta ma'lumot topildi`);
+        console.log(`${leads.length} ta so'rov topildi`);
         res.json(leads);
     } catch (err) {
-        console.error('Ma\'lumotlarni o\'qishda xatolik:', err);
-        res.status(500).json({ error: 'Ma\'lumotlarni o\'qishda xatolik yuz berdi' });
+        console.error("Leads faylini o'qishda xato:", err);
+        res.status(500).json({ error: 'Ma\'lumotlarni o\'qishda xatolik' });
     }
 });
 
 // API to submit a new lead
 app.post('/api/leads', (req, res) => {
     try {
-        console.log('Yangi ma\'lumot qabul qilindi:', req.body);
+        console.log("Yangi so'rov ma'lumotlari qabul qilindi:", req.body);
         
-        // Yangi ma'lumot yaratish
+        // Yuboriladigan ma'lumotlarni tekshirish
+        if (!req.body.name || !req.body.phone) {
+            console.error("Majburiy maydonlar to'ldirilmagan");
+            return res.status(400).json({ error: 'Ism va telefon raqam kiritilishi shart' });
+        }
+
         const newLead = {
             id: Date.now(),
             name: req.body.name,
-            brand_name: req.body.brand_name,
+            brand_name: req.body.brand_name || "",
             phone: req.body.phone,
-            business_industry: req.body.business_industry || "-",
+            business_industry: req.body.business_industry || "",
             source: req.body.source || 'direct',
             date: new Date().toLocaleString('uz-UZ')
         };
-        
-        // Ma'lumotlarni o'qish
+
+        console.log("Yangi so'rov strukturasi:", newLead);
+
+        // Avval mavjud ma'lumotlarni o'qish
         let leads = [];
-        
-        if (fs.existsSync(LEADS_FILE)) {
-            try {
-                const data = fs.readFileSync(LEADS_FILE, 'utf8');
-                leads = JSON.parse(data);
-                
-                // Leads ma'lumotlar massiv ekanligini tekshirish
-                if (!Array.isArray(leads)) {
-                    console.log('Leads fayli massiv emas, yangi massiv yaratilmoqda');
-                    leads = [];
-                }
-            } catch (e) {
-                console.error('JSON formatini o\'qishda xatolik:', e);
+        try {
+            const data = fs.readFileSync(LEADS_FILE, 'utf8');
+            leads = JSON.parse(data);
+            if (!Array.isArray(leads)) {
+                console.warn("Fayl massiv emas, yangi massiv yaratildi");
                 leads = [];
             }
+        } catch (err) {
+            console.error("Ma'lumotlarni o'qishda xatolik:", err.message);
+            leads = [];
         }
-        
-        // Yangi ma'lumotni qo'shish
+
+        // Yangi ma'lumotni boshiga qo'shish
         leads.unshift(newLead);
-        
+
         // Ma'lumotlarni saqlash
-        try {
-            fs.writeFileSync(LEADS_FILE, JSON.stringify(leads, null, 2), 'utf8');
-            console.log(`Ma'lumot muvaffaqiyatli saqlandi. Jami: ${leads.length} ta.`);
-            
-            // Ma'lumotlarni qaytarish
-            res.status(201).json(newLead);
-        } catch (error) {
-            console.error('Ma\'lumotlarni saqlashda xatolik:', error);
-            res.status(500).json({ error: 'Ma\'lumotlarni saqlashda xatolik yuz berdi' });
-        }
+        fs.writeFileSync(LEADS_FILE, JSON.stringify(leads, null, 2), 'utf8');
+        console.log(`Yangi so'rov saqlandi. Jami so'rovlar soni: ${leads.length}`);
+
+        res.status(201).json(newLead);
     } catch (err) {
-        console.error('Kutilmagan xatolik:', err);
+        console.error("Xatolik yuz berdi:", err);
         res.status(500).json({ error: 'Serverda xatolik yuz berdi' });
     }
 });
@@ -285,6 +267,54 @@ app.get('/api/leads/download', auth, async (req, res) => {
     } catch (err) {
         console.error('Excel faylini yaratishda xatolik:', err);
         res.status(500).json({ error: 'Excel faylini yaratishda xatolik' });
+    }
+});
+
+// API for debugging leads.json file
+app.get('/api/leads/debug', auth, (req, res) => {
+    try {
+        // Fayl mavjudligini tekshiramiz
+        const fileExists = fs.existsSync(LEADS_FILE);
+        
+        if (!fileExists) {
+            return res.json({
+                status: "error",
+                message: "Leads.json fayli mavjud emas",
+                filePath: LEADS_FILE
+            });
+        }
+        
+        // Faylni o'qishga harakat qilamiz
+        const data = fs.readFileSync(LEADS_FILE, 'utf8');
+        
+        try {
+            // JSON formatida ekanini tekshiramiz
+            const leads = JSON.parse(data);
+            
+            return res.json({
+                status: "success",
+                filePath: LEADS_FILE,
+                fileSize: data.length,
+                leads: leads,
+                isArray: Array.isArray(leads),
+                leadsCount: Array.isArray(leads) ? leads.length : 'N/A'
+            });
+        } catch (parseError) {
+            return res.json({
+                status: "error",
+                message: "JSON formatida xatolik",
+                filePath: LEADS_FILE,
+                fileContent: data,
+                error: parseError.message
+            });
+        }
+    } catch (err) {
+        return res.json({
+            status: "error",
+            message: "Faylni o'qishda xatolik",
+            filePath: LEADS_FILE,
+            error: err.message
+        });
     }
 });
 
