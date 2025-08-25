@@ -126,15 +126,16 @@ app.get('/api/leads', auth, (req, res) => {
     }
 });
 
-// API to submit a new lead
+// API to submit a new lead (form submission)
 app.post('/api/leads', (req, res) => {
+    // Yangilangan maydon nomlari bilan ma'lumotlarni qabul qilish
     const newLead = {
         id: Date.now(),
-        clientName: req.body.name || "",
-        clientSurname: "",
+        clientName: req.body.clientName || "",
+        clientSurname: req.body.clientSurname || "",
         phone: req.body.phone || "",
-        brandName: req.body.brand_name || "",
-        personType: req.body.business_industry || "jismoniy",
+        brandName: req.body.brandName || "",
+        personType: req.body.personType || "jismoniy",
         assignedTo: "tasdiqlanmagan",
         status: "yangi",
         source: req.body.source || "Noma'lum",
