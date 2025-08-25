@@ -7,31 +7,75 @@ const ExcelJS = require('exceljs');
 
 const app = express();
 const PORT = process.env.PORT || 3000;
-const DATA_DIR = path.join(__dirname, 'data');
+
+// --- Muhim! Render.com muhitida ishlash uchun ---
+// Render muhitida Persistent Disk /opt/render/project/src/ papkasi ichiga mount qilinadi
+const isRenderEnvironment = process.env.RENDER === 'true';
+
+// Render muhiti uchun boshqa papka, oddiy ishga tushirish uchun boshqa papka
+const DATA_DIR = isRenderEnvironment 
+  ? path.join('/opt/render/project/data') 
+  : path.join(__dirname, 'data');
+
 const LEADS_FILE = path.join(DATA_DIR, 'leads.json');
 
-// --- O'ZGARTIRISH: Ma'lumotlar papkasini va faylini ishonchli yaratish ---
-try {
-    // Agar 'data' yo'li mavjud bo'lsa-yu, u papka bo'lmasa...
-    if (fs.existsSync(DATA_DIR) && !fs.lstatSync(DATA_DIR).isDirectory()) {
-        console.log(`'${DATA_DIR}' papka emas, fayl. Uni o'chirib, papka yaratilmoqda.`);
-        fs.unlinkSync(DATA_DIR); // Faylni o'chirish
-    }
+console.log(`Ma'lumotlar papkasi: ${DATA_DIR}`);
+console.log(`Leads fayli: ${LEADS_FILE}`);
 
-    // Agar 'data' papkasi mavjud bo'lmasa, uni yaratish
+// --- Papka va fayllarni yaratish ---
+try {
+    // Papkani yaratish
     if (!fs.existsSync(DATA_DIR)) {
-        console.log(`'${DATA_DIR}' papkasi yaratilmoqda.`);
+        console.log(`'${DATA_DIR}' papkasi yaratilmoqda...`);
         fs.mkdirSync(DATA_DIR, { recursive: true });
     }
 
-    // Agar 'leads.json' fayli mavjud bo'lmasa, uni yaratish
+    // Agar fayl mavjud bo'lmasa, yangi format bilan yaratish
     if (!fs.existsSync(LEADS_FILE)) {
-        console.log(`'${LEADS_FILE}' fayli yaratilmoqda.`);
-        fs.writeFileSync(LEADS_FILE, '[]', 'utf8');
+        console.log(`'${LEADS_FILE}' fayli yaratilmoqda...`);
+        // Namuna ma'lumot
+        const initialData = [
+            {
+                id: Date.now(),
+                clientName: "Akmal",
+                clientSurname: "Akmalov",
+                phone: "+998901234567",
+                brandName: "Example Brand",
+                personType: "yuridik",
+                assignedTo: "operator1",
+                status: "yangi",
+                source: "test",
+                date: new Date().toLocaleString('uz-UZ')
+            }
+        ];
+        fs.writeFileSync(LEADS_FILE, JSON.stringify(initialData, null, 2), 'utf8');
+    } 
+    // Agar fayl mavjud bo'lsa, formatini tekshirish va yangilash
+    else {
+        const data = JSON.parse(fs.readFileSync(LEADS_FILE, 'utf8'));
+        if (Array.isArray(data) && data.length > 0 && !data[0].clientName) {
+            console.log("Eski format aniqlandi. Ma'lumotlar yangi formatga o'tkazilmoqda...");
+            
+            // Eski ma'lumotlarni yangi formatga o'tkazish
+            const updatedData = data.map(item => ({
+                id: item.id || Date.now(),
+                clientName: item.name || "",
+                clientSurname: "",
+                phone: item.phone || "",
+                brandName: item.brand_name || "",
+                personType: item.business_industry || "jismoniy",
+                assignedTo: "tasdiqlanmagan",
+                status: "yangi",
+                source: item.source || "direct",
+                date: item.date || new Date().toLocaleString('uz-UZ')
+            }));
+            
+            fs.writeFileSync(LEADS_FILE, JSON.stringify(updatedData, null, 2), 'utf8');
+            console.log("Ma'lumotlar yangi formatga muvaffaqiyatli o'tkazildi.");
+        }
     }
 } catch (error) {
     console.error("Ishga tushirishda papka/fayl yaratishda xatolik:", error);
-    // Xatolik bo'lsa, serverni ishga tushirmaslik uchun jarayonni to'xtatish
     process.exit(1);
 }
 
@@ -71,7 +115,7 @@ if (!fs.existsSync(LEADS_FILE)) {
     fs.writeFileSync(LEADS_FILE, '[]', 'utf8');
 }
 
-// API to get all leads (endi himoyalangan)
+// API to get all leads
 app.get('/api/leads', auth, (req, res) => {
     try {
         const data = fs.readFileSync(LEADS_FILE, 'utf8');
@@ -82,41 +126,71 @@ app.get('/api/leads', auth, (req, res) => {
     }
 });
 
-// API to submit a new lead (bu ochiq qoladi, parol so'ramaydi)
+// API to submit a new lead
 app.post('/api/leads', (req, res) => {
     const newLead = {
         id: Date.now(),
-        name: req.body.name,
-        brand_name: req.body.brand_name,
-        phone: req.body.phone,
-        business_industry: req.body.business_industry || '-', // Agar bo'sh bo'lsa chiziqcha qo'yadi
-        source: req.body.source || 'Noma\'lum',
+        clientName: req.body.name || "",
+        clientSurname: "",
+        phone: req.body.phone || "",
+        brandName: req.body.brand_name || "",
+        personType: req.body.business_industry || "jismoniy",
+        assignedTo: "tasdiqlanmagan",
+        status: "yangi",
+        source: req.body.source || "Noma'lum",
         date: new Date().toLocaleString('uz-UZ')
     };
 
-    fs.readFile(LEADS_FILE, 'utf8', (err, data) => {
-        if (err) {
-            return res.status(500).send('Error reading leads file.');
-        }
+    try {
+        const data = fs.readFileSync(LEADS_FILE, 'utf8');
         const leads = JSON.parse(data);
         leads.unshift(newLead); // Add new lead to the beginning
-        fs.writeFile(LEADS_FILE, JSON.stringify(leads, null, 2), (err) => {
-            if (err) {
-                console.error("Lead yozishda xatolik:", err);
-                return res.status(500).send('Error saving lead.');
-            }
-            res.status(201).json(newLead);
-        });
-    });
+        fs.writeFileSync(LEADS_FILE, JSON.stringify(leads, null, 2));
+        res.status(201).json(newLead);
+    } catch (err) {
+        console.error("Lead yozishda xatolik:", err);
+        return res.status(500).send('Error saving lead.');
+    }
 });
 
-// --- YANGI: So'rovni o'chirish uchun API ---
+// Yangi: Mijoz ma'lumotlarini yangilash uchun API
+app.put('/api/leads/:id/update', auth, (req, res) => {
+    const leadId = parseInt(req.params.id, 10);
+    const updates = req.body;
+    
+    try {
+        const data = fs.readFileSync(LEADS_FILE, 'utf8');
+        const leads = JSON.parse(data);
+        
+        const leadIndex = leads.findIndex(lead => lead.id === leadId);
+        
+        if (leadIndex === -1) {
+            return res.status(404).send('Bunday ID topilmadi.');
+        }
+        
+        // Faqat ruxsat etilgan maydonlarni yangilash
+        const allowedFields = ['assignedTo', 'status', 'clientSurname'];
+        
+        Object.keys(updates).forEach(key => {
+            if (allowedFields.includes(key)) {
+                leads[leadIndex][key] = updates[key];
+            }
+        });
+        
+        fs.writeFileSync(LEADS_FILE, JSON.stringify(leads, null, 2));
+        res.status(200).json(leads[leadIndex]);
+    } catch (err) {
+        console.error("Ma'lumotni yangilashda xatolik:", err);
+        res.status(500).send('Yangilashda xatolik.');
+    }
+});
+
+// API to delete a lead
 app.delete('/api/leads/:id', auth, (req, res) => {
     const leadId = parseInt(req.params.id, 10);
-    fs.readFile(LEADS_FILE, 'utf8', (err, data) => {
-        if (err) {
-            return res.status(500).send('Error reading leads file.');
-        }
+    
+    try {
+        const data = fs.readFileSync(LEADS_FILE, 'utf8');
         let leads = JSON.parse(data);
         const initialLength = leads.length;
         leads = leads.filter(lead => lead.id !== leadId);
@@ -125,15 +199,13 @@ app.delete('/api/leads/:id', auth, (req, res) => {
             return res.status(404).send('Bunday ID topilmadi.');
         }
 
-        fs.writeFile(LEADS_FILE, JSON.stringify(leads, null, 2), (err) => {
-            if (err) {
-                return res.status(500).send('Error saving leads file.');
-            }
-            res.status(200).send({ message: 'Muvaffaqiyatli o\'chirildi' });
-        });
-    });
+        fs.writeFileSync(LEADS_FILE, JSON.stringify(leads, null, 2));
+        res.status(200).send({ message: 'Muvaffaqiyatli o\'chirildi' });
+    } catch (err) {
+        console.error("O'chirishda xatolik:", err);
+        res.status(500).send('O\'chirishda xatolik.');
+    }
 });
-
 
 // API to download leads as XLSX
 app.get('/api/leads/download', auth, async (req, res) => {
@@ -144,20 +216,51 @@ app.get('/api/leads/download', auth, async (req, res) => {
         const workbook = new ExcelJS.Workbook();
         const worksheet = workbook.addWorksheet('Mijozlar');
 
+        // Yangi kolonka tartibiga o'tish
         worksheet.columns = [
             { header: 'Sana', key: 'date', width: 20 },
-            { header: 'Ism', key: 'name', width: 25 },
-            { header: 'Brend Nomi', key: 'brand_name', width: 25 },
+            { header: 'Ism', key: 'clientName', width: 20 },
+            { header: 'Familiya', key: 'clientSurname', width: 20 },
             { header: 'Telefon', key: 'phone', width: 20 },
-            { header: 'Biznes Yo\'nalishi', key: 'business_industry', width: 30 },
+            { header: 'Brend Nomi', key: 'brandName', width: 25 },
+            { header: 'Shaxs Turi', key: 'personType', width: 15 },
+            { header: 'Operator', key: 'assignedTo', width: 20 },
+            { header: 'Status', key: 'status', width: 15 },
             { header: 'Manba', key: 'source', width: 20 }
         ];
 
         // Ustun sarlavhalarini qalin qilish
         worksheet.getRow(1).font = { bold: true };
+        
+        // Kolonkalarni markazga to'g'rilash
+        worksheet.columns.forEach(column => {
+            column.alignment = { vertical: 'middle', horizontal: 'center' };
+        });
 
         // Ma'lumotlarni qatorlarga qo'shish
         worksheet.addRows(leads);
+        
+        // Qatorlarga stil berish
+        worksheet.eachRow({ includeEmpty: false }, function(row, rowNumber) {
+            if (rowNumber === 1) {
+                // Sarlavha qatori rangi
+                row.fill = {
+                    type: 'pattern',
+                    pattern: 'solid',
+                    fgColor: { argb: 'FFD3D3D3' }
+                };
+            }
+            
+            // Har bir katak uchun ramka
+            row.eachCell({ includeEmpty: true }, function(cell) {
+                cell.border = {
+                    top: { style: 'thin' },
+                    left: { style: 'thin' },
+                    bottom: { style: 'thin' },
+                    right: { style: 'thin' }
+                };
+            });
+        });
 
         res.setHeader(
             'Content-Type',
