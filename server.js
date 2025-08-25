@@ -100,12 +100,13 @@ app.get('/api/leads', auth, (req, res) => {
     }
 });
 
-// API to submit a new lead (form submission)
+// API to submit a new lead
 app.post('/api/leads', (req, res) => {
     try {
-        console.log("Kelgan ma'lumotlar:", req.body);
+        // Kelgan ma'lumotlarni konsolga chiqaramiz va tekshiramiz
+        console.log("Kelgan ma'lumotlar:", JSON.stringify(req.body));
         
-        // Ma'lumotlarni frontend jo'natgan formati bilan qabul qilish
+        // Ma'lumotlarni to'g'ri nomlar bilan qabul qilish
         const newLead = {
             id: Date.now(),
             clientName: req.body.name || "",
@@ -119,22 +120,22 @@ app.post('/api/leads', (req, res) => {
             date: new Date().toLocaleString('uz-UZ')
         };
 
-        console.log("Yangi so'rov yaratildi:", newLead);
+        console.log("Yangi so'rov yaratildi:", JSON.stringify(newLead));
 
         // Ma'lumotlarni o'qish va yangi ma'lumotni qo'shish
         let leads = [];
-        if (fs.existsSync(LEADS_FILE)) {
-            const data = fs.readFileSync(LEADS_FILE, 'utf8');
-            try {
+        try {
+            if (fs.existsSync(LEADS_FILE)) {
+                const data = fs.readFileSync(LEADS_FILE, 'utf8');
                 leads = JSON.parse(data);
                 if (!Array.isArray(leads)) {
-                    console.warn("Fayldagi ma'lumot massiv emas, massivga o'zgartiriladi");
+                    console.warn("Fayldagi ma'lumot massiv emas, yangi massiv yaratildi");
                     leads = [];
                 }
-            } catch (e) {
-                console.error("JSON parse xatosi:", e);
-                leads = [];
             }
+        } catch (e) {
+            console.error("Ma'lumotlarni o'qishda xato:", e);
+            leads = [];
         }
 
         // Yangi ma'lumotni boshiga qo'shish
@@ -208,13 +209,24 @@ app.delete('/api/leads/:id', auth, (req, res) => {
 // API to download leads as XLSX
 app.get('/api/leads/download', auth, async (req, res) => {
     try {
-        const data = fs.readFileSync(LEADS_FILE, 'utf8');
-        const leads = JSON.parse(data);
+        console.log("Excel yuklab olish so'rovi qabul qilindi");
+        let leads = [];
+        
+        try {
+            if (fs.existsSync(LEADS_FILE)) {
+                const data = fs.readFileSync(LEADS_FILE, 'utf8');
+                leads = JSON.parse(data);
+                console.log(`Excel uchun ${leads.length} ta yozuv o'qildi`);
+            }
+        } catch (e) {
+            console.error("Ma'lumotlarni o'qishda xato:", e);
+            leads = [];
+        }
 
         const workbook = new ExcelJS.Workbook();
         const worksheet = workbook.addWorksheet('Mijozlar');
 
-        // Yangi kolonka tartibiga o'tish
+        // Ustunlarni sozlash
         worksheet.columns = [
             { header: 'Sana', key: 'date', width: 20 },
             { header: 'Ism', key: 'clientName', width: 20 },
@@ -227,29 +239,36 @@ app.get('/api/leads/download', auth, async (req, res) => {
             { header: 'Manba', key: 'source', width: 20 }
         ];
 
-        // Ustun sarlavhalarini qalin qilish
+        // Sarlavhalarni qalin qilish
         worksheet.getRow(1).font = { bold: true };
         
-        // Kolonkalarni markazga to'g'rilash
-        worksheet.columns.forEach(column => {
-            column.alignment = { vertical: 'middle', horizontal: 'center' };
+        // Qatorlarni qo'shish
+        leads.forEach(lead => {
+            worksheet.addRow({
+                date: lead.date || '',
+                clientName: lead.clientName || '',
+                clientSurname: lead.clientSurname || '',
+                phone: lead.phone || '',
+                brandName: lead.brandName || '',
+                personType: lead.personType || '',
+                assignedTo: lead.assignedTo || '',
+                status: lead.status || '',
+                source: lead.source || ''
+            });
         });
-
-        // Ma'lumotlarni qatorlarga qo'shish
-        worksheet.addRows(leads);
         
-        // Qatorlarga stil berish
-        worksheet.eachRow({ includeEmpty: false }, function(row, rowNumber) {
+        // Har bir katak uchun stillar
+        worksheet.eachRow({ includeEmpty: true }, function(row, rowNumber) {
             if (rowNumber === 1) {
-                // Sarlavha qatori rangi
-                row.fill = {
-                    type: 'pattern',
-                    pattern: 'solid',
-                    fgColor: { argb: 'FFD3D3D3' }
-                };
+                row.eachCell({ includeEmpty: true }, function(cell) {
+                    cell.fill = {
+                        type: 'pattern',
+                        pattern: 'solid',
+                        fgColor: { argb: 'FFD3D3D3' }
+                    };
+                });
             }
             
-            // Har bir katak uchun ramka
             row.eachCell({ includeEmpty: true }, function(cell) {
                 cell.border = {
                     top: { style: 'thin' },
@@ -257,21 +276,16 @@ app.get('/api/leads/download', auth, async (req, res) => {
                     bottom: { style: 'thin' },
                     right: { style: 'thin' }
                 };
+                cell.alignment = { vertical: 'middle', horizontal: 'center' };
             });
         });
 
-        res.setHeader(
-            'Content-Type',
-            'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
-        );
-        res.setHeader(
-            'Content-Disposition',
-            'attachment; filename=' + 'mijozlar.xlsx'
-        );
+        res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+        res.setHeader('Content-Disposition', 'attachment; filename=mijozlar.xlsx');
 
         await workbook.xlsx.write(res);
         res.end();
-
+        console.log("Excel fayli muvaffaqiyatli yaratildi");
     } catch (error) {
         console.error('XLSX faylini yaratishda xatolik:', error);
         res.status(500).send('Excel faylini yaratishda xatolik yuz berdi.');
