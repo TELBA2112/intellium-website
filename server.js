@@ -9,7 +9,7 @@ const app = express();
 const PORT = process.env.PORT || 3000;
 const LEADS_FILE = path.join(__dirname, 'leads.json'); // Fayl o'rnini soddalashtiramiz
 
-// --- YANGI: Autentifikatsiya sozlamalari ---
+// --- Autentifikatsiya sozlamalari ---
 const ADMIN_USER = 'admin';
 const ADMIN_PASS = 'intellium2023';
 
@@ -39,71 +39,86 @@ app.get('/api/leads/download', auth);
 
 app.use(express.static(__dirname)); // Serve static files like index.html, admin.html
 
-// Ensure leads.json exists
+// MUHIM: Leads.json fayli mavjudligini tekshirish va yaratish
 if (!fs.existsSync(LEADS_FILE)) {
     console.log("Leads.json fayli mavjud emas, yangi fayl yaratilmoqda...");
     fs.writeFileSync(LEADS_FILE, '[]', 'utf8');
+} else {
+    console.log("Leads.json fayli mavjud, ishlash davom ettiriladi.");
+    // Faylni o'qib, to'g'ri formatda ekanligini tekshiramiz
+    try {
+        const data = fs.readFileSync(LEADS_FILE, 'utf8');
+        JSON.parse(data); // Tekshirib ko'ramiz
+        console.log("Leads.json fayli tekshirildi, ma'lumotlar to'g'ri formatda.");
+    } catch (e) {
+        console.error("Leads.json faylini o'qishda xatolik:", e);
+        console.log("Faylni qayta yaratish kerak...");
+        fs.writeFileSync(LEADS_FILE, '[]', 'utf8');
+    }
 }
 
-// API to get all leads (endi himoyalangan)
+// API to get all leads
 app.get('/api/leads', (req, res) => {
     console.log("So'rovlar ro'yxati so'raldi");
-    fs.readFile(LEADS_FILE, 'utf8', (err, data) => {
-        if (err) {
-            console.error("Leads faylini o'qishda xato:", err);
-            return res.status(500).send('Error reading leads file.');
-        }
-        try {
-            const leads = JSON.parse(data);
-            console.log(`${leads.length} ta so'rov topildi`);
-            res.json(leads);
-        } catch (e) {
-            console.error("JSON ni parse qilishda xato:", e);
-            res.status(500).send('JSON parsing error.');
-        }
-    });
+    try {
+        const data = fs.readFileSync(LEADS_FILE, 'utf8');
+        const leads = JSON.parse(data);
+        console.log(`${leads.length} ta so'rov topildi va qaytarildi`);
+        res.json(leads);
+    } catch (err) {
+        console.error("Leads faylini o'qishda xato:", err);
+        res.status(500).send('Error reading leads file.');
+    }
 });
 
-// API to submit a new lead (bu ochiq qoladi, parol so'ramaydi)
+// API to submit a new lead
 app.post('/api/leads', (req, res) => {
+    // Keladigan ma'lumotlar uchun log yozamiz
     console.log("Yangi so'rov qabul qilindi:", req.body);
     
-    const newLead = {
-        id: Date.now(),
-        clientName: req.body.name,
-        clientSurname: "",
-        phone: req.body.phone,
-        brandName: req.body.brand_name,
-        personType: req.body.business_industry || "jismoniy",
-        assignedTo: "tasdiqlanmagan",
-        status: "yangi",
-        source: req.body.source || 'direct',
-        date: new Date().toLocaleString('uz-UZ')
-    };
+    try {
+        // Yangi ma'lumotlarni yaratish
+        const newLead = {
+            id: Date.now(),
+            name: req.body.name,
+            brand_name: req.body.brand_name,
+            phone: req.body.phone,
+            business_industry: req.body.business_industry || "-",
+            source: req.body.source || 'direct',
+            date: new Date().toLocaleString('uz-UZ')
+        };
 
-    fs.readFile(LEADS_FILE, 'utf8', (err, data) => {
-        if (err) {
-            console.error("Leads faylini o'qishda xato:", err);
-            return res.status(500).send('Error reading leads file.');
+        console.log("Yangi ma'lumot struktura yaratildi:", newLead);
+        
+        // Faylni o'qish
+        let leads = [];
+        
+        if (fs.existsSync(LEADS_FILE)) {
+            try {
+                const data = fs.readFileSync(LEADS_FILE, 'utf8');
+                leads = JSON.parse(data);
+            } catch (e) {
+                console.error("JSON parse xatosi:", e);
+                // Agar fayl buzilgan bo'lsa, yangi massiv yaratamiz
+                leads = [];
+            }
         }
 
-        try {
-            const leads = JSON.parse(data);
-            leads.unshift(newLead); // Add new lead to the beginning
-            
-            fs.writeFile(LEADS_FILE, JSON.stringify(leads, null, 2), 'utf8', (err) => {
-                if (err) {
-                    console.error("Ma'lumotlarni yozishda xato:", err);
-                    return res.status(500).send('Error saving lead.');
-                }
-                console.log("Yangi so'rov muvaffaqiyatli saqlandi");
-                res.status(201).json(newLead);
-            });
-        } catch (e) {
-            console.error("JSON ni parse qilishda xato:", e);
-            res.status(500).send('JSON parsing error.');
-        }
-    });
+        // Yangi ma'lumotni boshiga qo'shish
+        leads.unshift(newLead);
+        
+        console.log("Ma'lumotlar yozilmoqda, yangi ma'lumotlar soni:", leads.length);
+        
+        // Ma'lumotlarni faylga saqlash
+        fs.writeFileSync(LEADS_FILE, JSON.stringify(leads, null, 2), 'utf8');
+        console.log("Yangi so'rov muvaffaqiyatli saqlandi");
+        
+        // Muvaffaqiyatli javob qaytarish
+        res.status(201).json(newLead);
+    } catch (err) {
+        console.error("Ma'lumotlarni saqlashda xatolik yuz berdi:", err);
+        res.status(500).send('Error saving lead.');
+    }
 });
 
 // API to update lead
@@ -253,8 +268,8 @@ app.get('/api/leads/download', auth, async (req, res) => {
     }
 });
 
+// Serverni ishga tushirish
 app.listen(PORT, '0.0.0.0', () => {
     console.log(`Server http://localhost:${PORT} portida ishga tushdi`);
 });
-                
- 
+
