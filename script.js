@@ -23,19 +23,34 @@ document.addEventListener('DOMContentLoaded', function() {
     leadForm.addEventListener('submit', function(event) {
         event.preventDefault(); // Sahifani yangilanishini to'xtatish
 
-        const leadData = {
-            name: document.getElementById('name').value,
-            brand_name: document.getElementById('brand_name').value,
-            phone: '+' + phoneMask.unmaskedValue, // Maska belgilaridan tozalangan raqamni olish
-            business_industry: document.getElementById('business_industry').value,
-            source: sourceInput.value || 'direct'
-        };
-        
-        // Raqam to'liq kiritilganini tekshirish
+        // Ma'lumotlarni yig'ish
+        const nameValue = document.getElementById('name').value.trim();
+        const brandValue = document.getElementById('brand_name').value.trim();
+        const industryValue = document.getElementById('business_industry').value.trim();
+        const phoneValue = '+' + phoneMask.unmaskedValue;
+        const sourceValue = sourceInput.value || 'direct';
+
+        // Ma'lumotlarni tekshirish
+        if (!nameValue || nameValue.length < 2) {
+            alert('Iltimos, ismingizni to\'g\'ri kiriting.');
+            return;
+        }
+
         if (phoneMask.unmaskedValue.length !== 12) {
             alert('Iltimos, telefon raqamini to\'liq kiriting.');
             return;
         }
+
+        // Servergа yuboriladigan ma'lumotlar
+        const leadData = {
+            name: nameValue,
+            brand_name: brandValue,
+            phone: phoneValue,
+            business_industry: industryValue,
+            source: sourceValue
+        };
+
+        console.log("Serverga yuborilayotgan ma'lumotlar:", leadData);
 
         // Ma'lumotlarni serverga jo'natish
         fetch('/api/leads', {
@@ -45,24 +60,36 @@ document.addEventListener('DOMContentLoaded', function() {
             },
             body: JSON.stringify(leadData),
         })
-        .then(response => response.json())
+        .then(response => {
+            // Avval xato holatlarda muammo bo'lishini oldini olish
+            if (!response.ok) {
+                throw new Error(`Server xatosi: ${response.status}`);
+            }
+            return response.json();
+        })
         .then(data => {
-            console.log('Success:', data);
+            console.log('Server javobi:', data);
             
-            // --- O'ZGARTIRISH: alert() o'rniga chiroyli xabar ko'rsatish ---
+            // Muvaffaqiyatli xabar ko'rsatish
             const successMessage = document.getElementById('success-message');
             successMessage.classList.remove('hidden');
 
+            // Forma maydonlarini tozalash
+            leadForm.reset();
+            phoneMask.updateValue(); // Maska qiymatini tozalash
+            
+            // 4 soniyadan so'ng xabarni yopish
             setTimeout(() => {
                 successMessage.classList.add('hidden');
-            }, 4000); // 4 sekunddan keyin yopish
-
-            leadForm.reset();
-            phoneMask.updateValue(); // Maska qiymatini ham tozalash
+            }, 4000);
         })
         .catch((error) => {
-            console.error('Error:', error);
-            alert('Xatolik yuz berdi. Iltimos, qayta urinib ko\'ring.');
+            console.error('Xatolik:', error);
+            alert(`So'rovni yuborishda xatolik yuz berdi: ${error.message}`);
         });
     });
+});
+
+app.listen(3000, '0.0.0.0', () => {
+  console.log("Server running on port 3000");
 });
